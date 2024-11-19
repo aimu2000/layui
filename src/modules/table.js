@@ -501,7 +501,8 @@ layui.define(['lay', 'laytpl', 'laypage', 'form', 'util'], function(exports){
         try {
           isNone = parent.css('display') === 'none';
         } catch(e){}
-        if(parent[0] && !lay.isTopElem(parent[0]) && (!width || isNone)) return getWidth(parent.parent());
+        var parentElem = parent.parent();
+        if(parent[0] && parentElem && parentElem.nodeType === 1 && (!width || isNone)) return getWidth(parentElem);
         return width;
       };
       return getWidth();
@@ -1060,7 +1061,11 @@ layui.define(['lay', 'laytpl', 'laypage', 'form', 'util'], function(exports){
   Class.prototype.resize = function(){
     var that = this;
 
-    if (!that.layMain) return;
+    var tableElemIsConnected = that.layMain && ('isConnected' in that.layMain[0]
+      ? that.layMain[0].isConnected 
+      : $.contains(document.body, that.layMain[0]));
+
+    if(!tableElemIsConnected) return;
 
     that.fullSize(); // 让表格铺满
     that.setColsWidth(); // 自适应列宽
@@ -2072,7 +2077,7 @@ layui.define(['lay', 'laytpl', 'laypage', 'form', 'util'], function(exports){
     ](HIDE);
 
     // 操作栏
-    that.layFixRight.css('right', scrollWidth - 1);
+    that.layFixRight.css('right', scrollWidth);
   };
 
   /**
@@ -2795,16 +2800,26 @@ layui.define(['lay', 'laytpl', 'laypage', 'form', 'util'], function(exports){
       layer.close(that.tipsIndex);
     });
 
+    var rAF = window.requestAnimationFrame || function(fn){return setTimeout(fn, 1000 / 60)};
+
     // 固定列滚轮事件 - 临时兼容方案
     that.layFixed.find(ELEM_BODY).on('mousewheel DOMMouseScroll', function(e) {
       var delta = e.originalEvent.wheelDelta || -e.originalEvent.detail;
       var scrollTop = that.layMain.scrollTop();
-      var step = 30;
+      var step = 100;
+      var rAFStep = 10;
 
       e.preventDefault();
-      that.layMain.scrollTop(scrollTop + (delta > 0 ? -step : step));
+      var cb = function(){
+        if(step > 0){
+          step -= rAFStep;
+          scrollTop += (delta > 0 ? -rAFStep : rAFStep);
+          that.layMain.scrollTop(scrollTop);
+          rAF(cb);
+        }
+      }
+      rAF(cb);
     });
-
   }
 
   /**
