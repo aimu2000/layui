@@ -28,7 +28,7 @@
 
   // constructor
   var Class = function() {
-    this.v = '2.11.0-rc.1'; // 版本号
+    this.v = '2.11.0'; // 版本号
   };
 
   // 识别预先可能定义的指定全局对象
@@ -156,7 +156,7 @@
     }
   };
 
-  // 或许配置及临时缓存信息
+  // 获取配置及临时缓存信息
   Class.prototype.cache = Object.assign(config, cache);
 
   /**
@@ -421,7 +421,7 @@
   Class.prototype.link = function(href, callback, id) {
     var that = this;
     var head = document.getElementsByTagName('head')[0];
-    var link = document.createElement('link');
+    var hasCallback = typeof callback === 'function';
 
     // 若第二个参数为 string 类型，则该参数为 id
     if (typeof callback === 'string') {
@@ -440,26 +440,31 @@
       });
     }
 
-    // 若为传入 id ，则取路径 `//` 后面的字符拼接为 id，不含.与参数
+    // 若未传入 id ，则取路径 `//` 后面的字符拼接为 id，不含.与参数
     id = id || href.replace(/^(#|(http(s?)):\/\/|\/\/)|\.|\/|\?.+/g, '');
     id = 'layuicss-'+ id;
 
-    link.href = href + (config.debug ? '?v='+new Date().getTime() : '');
-    link.rel = 'stylesheet';
-    link.id = id;
+    var link = document.getElementById(id);
 
-    // 插入节点
-    if (!document.getElementById(id)) {
+    // 初始创建节点
+    if (!link) {
+      link = document.createElement('link');
+      link.href = href + (config.debug ? '?v='+new Date().getTime() : '');
+      link.rel = 'stylesheet';
+      link.id = id;
       head.appendChild(link);
     }
 
-    // 是否执行回调
-    if (typeof callback !== 'function') {
+    // 若加载已完成，则直接执行回调函数
+    if (link.__lay_readyState__ === 'complete') {
+      hasCallback && callback(link);
       return that;
     }
 
+    // 初始加载
     onNodeLoad(link, function() {
-      callback(link);
+      link.__lay_readyState__ = 'complete';
+      hasCallback && callback(link);
     }, function() {
       error(href + ' load error', 'error');
       head.removeChild(link); // 移除节点
@@ -521,12 +526,16 @@
     var hash = hash || location.hash;
     var data = {
       path: [],
+      pathname: [],
       search: {},
       hash: (hash.match(/[^#](#.*$)/) || [])[1] || '',
       href: ''
     };
 
-    if (!/^#/.test(hash)) return data; // 禁止非路由规范
+    // 禁止非 hash 路由规范
+    if (!/^#/.test(hash)) {
+      return data;
+    }
 
     hash = hash.replace(/^#/, '');
     data.href = hash;
@@ -540,6 +549,7 @@
       }() : data.path.push(item);
     });
 
+    data.pathname = data.path; // path → pathname, 与 layui.url 一致
     return data;
   };
 
