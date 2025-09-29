@@ -2,14 +2,16 @@
  * form 表单组件
  */
 
-layui.define(['lay', 'layer', 'util'], function(exports){
+layui.define(['lay', 'i18n', 'layer', 'util'], function(exports){
   "use strict";
 
   var $ = layui.$;
   var layer = layui.layer;
   var util = layui.util;
+  var lay = layui.lay;
   var hint = layui.hint();
   var device = layui.device();
+  var i18n = layui.i18n;
 
   var MOD_NAME = 'form';
   var ELEM = '.layui-form';
@@ -19,6 +21,8 @@ layui.define(['lay', 'layer', 'util'], function(exports){
   var DISABLED = 'layui-disabled';
   var OUT_OF_RANGE = 'layui-input-number-out-of-range';
   var BAD_INPUT = 'layui-input-number-invalid';
+
+  var resizeObserver = lay.createSharedResizeObserver(MOD_NAME);
 
   // ie8 中可以获取到 input 元素的 'indeterminate' 属性描述符，但重新定义 getter/setter 无效，无报错
   // AppleWebKit/537.36 无法获取 input 元素任意属性的属性描述符(包括lookupGetter)，但可以重新定义 getter/setter
@@ -31,42 +35,42 @@ layui.define(['lay', 'layer', 'util'], function(exports){
       verify: {
         required: function(value) {
           if (!/[\S]+/.test(value) || value === undefined || value === null) {
-            return '必填项不能为空';
+            return i18n.$t('form.validateMessages.required');
           }
         },
         phone: function(value) {
           var EXP = /^1\d{10}$/;
           if (value && !EXP.test(value)) {
-            return '手机号格式不正确';
+            return i18n.$t('form.validateMessages.phone');
           }
         },
         email: function(value) {
           var EXP = /^([a-zA-Z0-9_\.\-])+\@(([a-zA-Z0-9\-])+\.)+([a-zA-Z0-9]{2,4})+$/;
           if (value && !EXP.test(value)) {
-            return '邮箱格式不正确';
+            return i18n.$t('form.validateMessages.email');
           }
         },
         url: function(value) {
           var EXP = /^(#|(http(s?)):\/\/|\/\/)[^\s]+\.[^\s]+$/;
           if (value && !EXP.test(value)) {
-            return '链接格式不正确';
+            return i18n.$t('form.validateMessages.url');
           }
         },
         number: function(value){
           if (value && isNaN(value)) {
-            return '只能填写数字';
+            return i18n.$t('form.validateMessages.number');
           }
         },
         date: function(value){
           var EXP = /^(\d{4})[-\/](\d{1}|0\d{1}|1[0-2])([-\/](\d{1}|0\d{1}|[1-2][0-9]|3[0-1]))*$/;
           if (value && !EXP.test(value)) {
-            return '日期格式不正确';
+            return i18n.$t('form.validateMessages.date');
           }
         },
         identity: function(value) {
           var EXP = /(^\d{15}$)|(^\d{17}(x|X|\d)$)/;
           if (value && !EXP.test(value)) {
-            return '身份证号格式不正确';
+            return i18n.$t('form.validateMessages.identity');
           }
         }
       },
@@ -466,7 +470,7 @@ layui.define(['lay', 'layer', 'util'], function(exports){
 
       // 下拉选择框
       ,select: function(elem){
-        var TIPS = '请选择';
+        var TIPS = i18n.$t('form.select.placeholder');
         var CLASS = 'layui-form-select';
         var TITLE = 'layui-select-title';
         var NONE = 'layui-select-none';
@@ -522,6 +526,9 @@ layui.define(['lay', 'layer', 'util'], function(exports){
 
               updatePosition();
               $(window).on('resize.lay_select_resize', updatePosition);
+              if(resizeObserver){
+                resizeObserver.observe(reElem[0], updatePosition);
+              }
             }
             var top = reElem.offset().top + reElem.outerHeight() + 5 - $win.scrollTop();
             var dlHeight = dl.outerHeight();
@@ -574,6 +581,9 @@ layui.define(['lay', 'layer', 'util'], function(exports){
             if(isAppendTo){
               reElem.detach();
               $(window).off('resize.lay_select_resize');
+              if(resizeObserver){
+                resizeObserver.unobserve(reElem[0]);
+              }
             }
 
             if(choose) return;
@@ -765,7 +775,7 @@ layui.define(['lay', 'layer', 'util'], function(exports){
                 }
               }else{
                 if(none){
-                  dl.find('.'+NONE)[0] || dl.append('<p class="'+ NONE +'">无匹配项</p>');
+                  dl.find('.'+NONE)[0] || dl.append('<p class="'+ NONE + '">' + i18n.$t('form.select.noMatch') + '</p>');
                 } else {
                   dl.find('.'+NONE).remove();
                 }
@@ -956,7 +966,7 @@ layui.define(['lay', 'layer', 'util'], function(exports){
                 }
               });
               if (arr.length === 0) {
-                arr.push('<dd lay-value="" class="'+ DISABLED +'">None</dd>');
+                arr.push('<dd lay-value="" class="'+ DISABLED + '">' + i18n.$t('form.select.noData') + '</dd>');
               }
               return arr.join('');
             }();
@@ -1035,7 +1045,7 @@ layui.define(['lay', 'layer', 'util'], function(exports){
           reElem.on('click', function(){
              var hasLabel = check.closest('label').length;
              if(!hasLabel){
-              check.trigger('click');
+               check.trigger('click');
              }
           })
 
@@ -1158,7 +1168,7 @@ layui.define(['lay', 'layer', 'util'], function(exports){
           reElem.on('click', function(){
              var hasLabel = radio.closest('label').length;
              if(!hasLabel){
-              radio.trigger('click');
+               radio.trigger('click');
              }
           })
 
@@ -1258,7 +1268,7 @@ layui.define(['lay', 'layer', 'util'], function(exports){
       }
     } else {
       type ? (
-        items[type] ? items[type]() : hint.error('不支持的 "'+ type + '" 表单渲染')
+        items[type] ? items[type]() : hint.error('[form] "' + type + '" is an unsupported form element type')
       ) : renderItem();
     }
     return that;
@@ -1384,7 +1394,7 @@ layui.define(['lay', 'layer', 'util'], function(exports){
                 return othis;
               }(), {tips: 1});
             } else if(verType === 'alert') {
-              layer.alert(errorText, {title: '提示', shadeClose: true});
+              layer.alert(errorText, {title: i18n.$t('form.verifyErrorPromptTitle'), shadeClose: true});
             }
             // 若返回的为字符或数字，则自动弹出默认提示框；否则由 verify 方法中处理提示
             else if(/\b(string|number)\b/.test(typeof errorText)) {

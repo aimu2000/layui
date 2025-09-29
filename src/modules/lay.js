@@ -796,8 +796,152 @@
   };
 
   var hasOwnProperty = Object.prototype.hasOwnProperty;
+  /**
+   * 检查对象是否具有指定的属性
+   * @param {Record<string, any>} obj 要检查的对象
+   * @param {string} prop 要检查的属性名
+   * @returns {boolean} 如果对象具有指定的属性，则为 true；否则为 false
+   */
   lay.hasOwn = function(obj, prop){
     return hasOwnProperty.call(obj, prop);
+  };
+
+  /**
+   * 转义 HTML 字符串中的特殊字符
+   * @param {string} html 要转义的 HTML 字符串
+   * @returns {string} 转义后的 HTML 字符串
+   */
+  lay.escape = function (html) {
+    var exp = /[<"'>]|&(?=#?[a-zA-Z0-9]+)/g;
+    if (html === undefined || html === null) return '';
+
+    html += '';
+    if (!exp.test(html)) return html;
+
+    return html.replace(/&(?=#?[a-zA-Z0-9]+;?)/g, '&amp;')
+      .replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/'/g, '&#39;').replace(/"/g, '&quot;');
+  };
+
+  /**
+   * 还原转义的 HTML 字符串中的特殊字符
+   * @param {string} html 要还原转义的 HTML 字符串
+   * @returns {string} 还原转义后的 HTML 字符串
+   */
+  lay.unescape = function (html) {
+    if (html === undefined || html === null) return '';
+
+    return String(html).replace(/\&quot;/g, '"').replace(/\&#39;/g, '\'')
+      .replace(/\&gt;/g, '>').replace(/\&lt;/g, '<')
+      .replace(/\&amp;/g, '&');
+  };
+
+  /**
+   * 生成唯一的 ID 字符串
+   * @param {string} prefix ID 前缀，默认为'id'
+   * @returns {string} 唯一 ID 字符串
+   */
+  var generateUniqueId = (function () {
+    var counter = 0;
+    var lastTimestamp = null;
+
+    return function (prefix) {
+      prefix = prefix || 'id';
+      var timestamp = new Date().getTime();
+
+      // 如果时间戳与上一次相同，增加计数器
+      // 否则重置计数器
+      if (timestamp === lastTimestamp) {
+        counter++;
+      } else {
+        counter = 0;
+        lastTimestamp = timestamp;
+      }
+
+      // 结合时间戳、随机数和计数器生成 ID
+      var random = Math.floor(Math.random() * 10000);
+
+      return prefix + '-' + timestamp + '-' + random + '-' + counter;
+    };
+  })();
+
+  /**
+   * 创建共享的 ResizeObserver 实例
+   * @param {string} namespace 命名空间，用于区分不同的 ResizeObserver 实例
+   * @returns {ResizeObserver | null} ResizeObserver 实例或 null（如果不支持）
+   */
+  lay.createSharedResizeObserver = function (namespace) {
+    if (typeof window.ResizeObserver === 'undefined') {
+      window.console && console.log('ResizeObserver is not supported in this browser.');
+      return null;
+    }
+
+    namespace = namespace || '';
+    var ATTR_NAME = 'lay-' + namespace + '-resizeobserver-key';
+    var handlerCache = {};
+
+    var o = new ResizeObserver(function (entries) {
+      for (var i = 0; i < entries.length; i++) {
+        var attrValue = entries[i].target.getAttribute(ATTR_NAME);
+
+        if (attrValue) {
+          var callback = handlerCache[attrValue];
+          if (typeof callback === 'function') {
+            callback(entries[i]);
+          }
+        }
+      }
+    });
+
+    return Object.freeze({
+      observe: function (element, callback) {
+        if (!element || !(element instanceof Element)) {
+          window.console && console.log('createSharedResizeObserver: Cannot observe non-Element.');
+          return;
+        }
+
+        var attrValue = element.getAttribute(ATTR_NAME);
+        if (!attrValue) {
+          attrValue = generateUniqueId(namespace);
+          element.setAttribute(ATTR_NAME, attrValue);
+        }
+
+        // 使用同一个观察者实例多次观察同一个元素，不会重复添加
+        handlerCache[attrValue] = callback;
+        o.observe(element);
+      },
+      unobserve: function (element) {
+        if (!element || !(element instanceof Element)) {
+          window.console && console.log('createSharedResizeObserver: Cannot unobserve non-Element.');
+          return;
+        }
+
+        var attrValue = element.getAttribute(ATTR_NAME);
+        if (!attrValue) {
+          return;
+        }
+
+        // 清除相关回调
+        if (handlerCache[attrValue]) {
+          delete handlerCache[attrValue];
+        }
+
+        element.removeAttribute(ATTR_NAME);
+        o.unobserve(element);
+      },
+      disconnect: function () {
+        for (var key in handlerCache) {
+          if (lay.hasOwn(handlerCache,key)) {
+            delete handlerCache[key];
+            var elem = document.querySelector('[' + ATTR_NAME + '="' + key + '"]');
+            if(elem){
+              elem.removeAttribute(ATTR_NAME);
+            }
+          }
+        }
+        o.disconnect();
+      }
+    });
   };
 
 

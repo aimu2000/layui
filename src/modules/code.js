@@ -3,7 +3,7 @@
  * Code 预览组件
  */
 
-layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
+layui.define(['lay', 'i18n', 'util', 'element', 'tabs', 'form'], function(exports) {
   "use strict";
 
   var $ = layui.$;
@@ -13,6 +13,7 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
   var form = layui.form;
   var layer = layui.layer;
   var hint = layui.hint();
+  var i18n = layui.i18n;
 
   // 常量
   var CONST = {
@@ -47,6 +48,30 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
     lang: 'text', // 指定语言类型
     highlighter: false, // 是否开启语法高亮，'hljs','prism','shiki'
     langMarker: false, // 代码区域是否显示语言类型标记
+    highlightLine: { // 行高亮
+      // 聚焦
+      focus: {
+        range: '', // 高亮范围，不可全局设置值 '1,3-5,8'
+        comment: false, // 是否解析注释，性能敏感不可全局开启  [!code type:<lines>]
+        classActiveLine: 'layui-code-line-has-focus', // 添加到高亮行上的类
+        classActivePre: 'layui-code-has-focused-lines' // 有高亮行时向根元素添加的类
+      },
+      // 高亮
+      hl: {
+        comment: false,
+        classActiveLine: 'layui-code-line-highlighted',
+      },
+      // diff++
+      '++':{
+        comment: false,
+        classActiveLine: 'layui-code-line-diff-add',
+      },
+      // diff--
+      '--': {
+        comment: false,
+        classActiveLine: 'layui-code-line-diff-remove',
+      }
+    }
   };
 
   // 初始索引
@@ -60,6 +85,91 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
   var trim = function(str){
     return trimEnd(str).replace(/^\n|\n$/, '');
   };
+  
+  // '1,3-5,8' -> [1,3,4,5,8]
+  var parseHighlightedLines  = function(rangeStr){
+    if (typeof rangeStr !== 'string') return [];
+    var lines = $.map(rangeStr.split(','), function(v){
+      var range = v.split('-');
+      var start = parseInt(range[0], 10);
+      var end = parseInt(range[1], 10);
+      return start && end
+        ? $.map(new Array(end - start + 1), function(_, index){ return start + index })
+        : start ? start : undefined
+    })
+    return lines;
+  }
+
+  // 引用自 https://github.com/innocenzi/shiki-processor/blob/efa20624be415c866cc8e350d1ada886b6b5cd52/src/utils/create-range-processor.ts#L7
+  // 添加了 HTML 注释支持，用来处理预览场景 
+  var highlightLineRegex = /(?:\/\/|\/\*{1,2}|<!--|&lt;!--) *\[!code ([\w+-]+)(?::(\d+))?] *(?:\*{1,2}\/|-->|--&gt;)?/;
+  var preprocessHighlightLine = function (highlightLineOptions, codeLines) {
+    var hasHighlightLine = false;
+    var needParseComment = false;
+    var lineClassMap = Object.create(null);
+    var preClassMap = Object.create(null);
+
+    var updateLineClassMap = function (lineNumber, className) {
+      if (!lineClassMap[lineNumber]) {
+        lineClassMap[lineNumber] = [CONST.ELEM_LINE];
+      }
+      lineClassMap[lineNumber].push(className);
+    }
+
+    // 收集高亮行 className
+    $.each(highlightLineOptions, function (type, opts) {
+      if (opts.range) {
+        var highlightLines = parseHighlightedLines(opts.range);
+        if (highlightLines.length > 0) {
+          hasHighlightLine = true;
+          if (opts.classActivePre) {
+            preClassMap[opts.classActivePre] = true;
+          }
+          $.each(highlightLines, function (i, lineNumber) {
+            updateLineClassMap(lineNumber, opts.classActiveLine);
+          });
+        }
+      }
+      if (opts.comment) {
+        needParseComment = true;
+      }
+    });
+
+    // 解析行高亮注释并收集 className
+    if (needParseComment) {
+      $.each(codeLines, function (i, line) {
+        var match = line.match(highlightLineRegex);
+        if (match && match[1] && lay.hasOwn(highlightLineOptions, match[1])) {
+          var opts = highlightLineOptions[match[1]];
+          hasHighlightLine = true;
+          if (opts.classActivePre) {
+            preClassMap[opts.classActivePre] = true;
+          }
+          // 高亮的行数
+          var lines = parseInt(match[2], 10)
+          if (match[2] && lines && lines > 1) {
+            var startLine = i + 1;
+            var endLine = startLine + lines - 1;
+            var highlightLines = parseHighlightedLines(startLine + '-' + endLine);
+            if (highlightLines.length > 0) {
+              $.each(highlightLines, function (i, lineNumber) {
+                updateLineClassMap(lineNumber, opts.classActiveLine);
+              });
+            }
+          }else{
+            updateLineClassMap(i + 1, opts.classActiveLine);
+          }
+        }
+      });
+    }
+
+    return {
+      needParseComment: needParseComment,
+      hasHighlightLine: hasHighlightLine,
+      preClass: Object.keys(preClassMap).join(' '),
+      lineClassMap: lineClassMap
+    }
+  }
 
   // export api
   exports('code', function(options, mode){
@@ -141,10 +251,16 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
       // code 行
       var lines = String(html).split(/\r?\n/g);
 
+      // 预处理行高亮
+      var highlightLineInfo = preprocessHighlightLine(options.highlightLine, lines);
+
       // 包裹 code 行结构
       html = $.map(lines, function(line, num) {
+        var lineClass = (highlightLineInfo.hasHighlightLine && highlightLineInfo.lineClassMap[num + 1])
+          ? highlightLineInfo.lineClassMap[num + 1].join(' ')
+          : CONST.ELEM_LINE;
         return [
-          '<div class="'+ CONST.ELEM_LINE +'">',
+          '<div class="'+ lineClass + '">',
             (
               options.ln ? [
                 '<div class="'+ CONST.ELEM_LINE_NUM +'">',
@@ -153,11 +269,15 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
               ].join('') : ''
             ),
             '<div class="layui-code-line-content">',
-              (line || ' '),
+               (highlightLineInfo.needParseComment ? line.replace(highlightLineRegex, '') : line) || ' ',
             '</div>',
           '</div>'
         ].join('');
       });
+
+      if(highlightLineInfo.preClass){
+        othis.addClass(highlightLineInfo.preClass)
+      }
 
       return {
         lines: lines,
@@ -201,7 +321,7 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
     var tools = {
       copy: {
         className: 'file-b',
-        title: ['复制代码'],
+        title: [i18n.$t('code.copy')],
         event: function(obj){
           var code = util.unescape(finalCode(options.code));
           var hasOnCopy = typeof options.onCopy === 'function';
@@ -215,14 +335,14 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
                 if(ret === false) return;
               }
 
-              layer.msg('已复制', {icon: 1});
+              layer.msg(i18n.$t('code.copied'), {icon: 1});
             },
             error: function() {
               if(hasOnCopy){
                 var ret = options.onCopy(code, false);
                 if(ret === false) return;
               }
-              layer.msg('复制失败', {icon: 2});
+              layer.msg(i18n.$t('code.copyError'), {icon: 2});
             }
           });
         }
@@ -277,7 +397,7 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
       $.extend(tools, {
         'full': {
           className: 'screen-full',
-          title: ['最大化显示', '还原显示'],
+          title: [i18n.$t('code.maximize'), i18n.$t('code.restore')],
           event: function(obj){
             var el = obj.elem;
             var elemView = el.closest('.'+ CONST.ELEM_PREVIEW);
@@ -302,7 +422,7 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
         },
         'window': {
           className: 'release',
-          title: ['在新窗口预览'],
+          title: [i18n.$t('code.preview')],
           event: function(obj){
             util.openWin({
               content: finalCode(options.code)
@@ -561,9 +681,11 @@ layui.define(['lay', 'util', 'element', 'tabs', 'form'], function(exports){
 
     // 若开启复制，且未开启预览，则单独生成复制图标
     if(options.copy && !options.preview){
-      var copyElem = $(['<span class="layui-code-copy">',
-        '<i class="layui-icon layui-icon-file-b" title="复制"></i>',
-      '</span>'].join(''));
+      var copyElem = $([
+        '<span class="layui-code-copy">',
+        '<i class="layui-icon layui-icon-file-b" title="' + i18n.$t('code.copy') + '"></i>',
+        '</span>'
+      ].join(''));
 
       // 点击复制
       copyElem.on('click', function(){

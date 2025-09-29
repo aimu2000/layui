@@ -9,6 +9,9 @@
 var isLayui = window.layui && layui.define;
 var $;
 var win;
+var i18n = {};
+var OBJECT_REPLACE_REGEX = /\{(\w+)\}/g;
+
 var ready = {
   getPath: function(){
     var jsPath = (document.currentScript && document.currentScript.tagName.toUpperCase() === 'SCRIPT') ? document.currentScript.src : function(){
@@ -27,15 +30,38 @@ var ready = {
     return GLOBAL.layer_dir || jsPath.substring(0, jsPath.lastIndexOf('/') + 1);
   }(),
   config: {
-    removeFocus: true
+    removeFocus: true,
+    lang: {
+      confirm: '确定',
+      cancel: '取消',
+      defaultTitle: '信息',
+      prompt: {
+        InputLengthPrompt: '最多输入 {length} 个字符'
+      },
+      photos: {
+        noData: '没有图片',
+        tools: {
+          rotate: '旋转',
+          scaleX: '水平变换',
+          zoomIn: '放大',
+          zoomOut: '缩小',
+          reset: '还原',
+          close: '关闭'
+        },
+        viewPicture: '查看原图',
+        urlError: {
+          prompt: '当前图片地址异常，\n是否继续查看下一张？',
+          confirm: '下一张',
+          cancel: '不看了'
+        }
+      }
+    },
   },
   end: {},
   beforeEnd: {},
   events: {resize: {}},
   minStackIndex: 0,
   minStackArr: [],
-  btn: ['确定', '取消'],
-
   // 五种原始层模式
   type: ['dialog', 'page', 'iframe', 'loading', 'tips'],
 
@@ -98,6 +124,43 @@ var ready = {
 
   }
 };
+
+  /**
+   * 获取对象中的值，lodash _.get 简易版
+   * @param {Record<string, any>} obj
+   * @param {string} path
+   * @param {any} defaultValue
+   */
+var get = function (obj, path, defaultValue) {
+  // 'a[0].b.c' ==> ['a', '0', 'b', 'c']
+  var casePath = path.replace(/\[(\d+)\]/g, '.$1').split('.');
+  var result = obj;
+
+  for (var i = 0; i < casePath.length; i++) {
+    result = result && result[casePath[i]];
+    if (result === null || result === undefined) {
+      return defaultValue;
+    }
+  }
+
+  return result;
+}
+
+// 根据给定的键从国际化消息中获取翻译后的内容
+i18n.$t = function(key) {
+  // 非 layui 环境去除命名空间前缀，从 config.lang 中取值
+  // TODO 简化版，暂不文档化，不支持配置多个 locale
+  key = key.replace(/^layer\./, '');
+  var result = get(ready.config.lang, key, key);
+  if(typeof result === 'string' && arguments.length > 1) {
+    var opts = arguments[1];
+    return result.replace(OBJECT_REPLACE_REGEX, function(match, key) {
+      return opts[key] !== undefined ? opts[key] : match;
+    })
+  }
+  return result;
+};
+
 
 // 默认内置方法。
 var layer = {
@@ -162,7 +225,7 @@ var layer = {
     }
     return layer.open($.extend({
       content: content,
-      btn: ready.btn,
+      btn: [i18n.$t('layer.confirm'), i18n.$t('layer.cancel')],
       yes: yes,
       btn2: cancel
     }, type ? {} : options));
@@ -225,6 +288,8 @@ var Class = function(setings){
   var that = this, creat = function(){
     that.creat();
   };
+  // TODO 临时的同步方案
+  ready.config.title = i18n.$t('layer.defaultTitle');
   that.index = ++layer.index;
   that.config.maxWidth = $(win).width() - 15*2; // 初始最大宽度：当前屏幕宽，左右留 15px 边距
   that.config = $.extend({}, that.config, ready.config, setings);
@@ -268,7 +333,7 @@ Class.pt.config = {
   shade: 0.3,
   fixed: true,
   move: doms[1],
-  title: '信息',
+  title: i18n.$t('layer.defaultTitle'),
   offset: 'auto',
   area: 'auto',
   closeBtn: 1,
@@ -456,7 +521,7 @@ Class.pt.creat = function(){
 
   switch(config.type){
     case 0:
-      config.btn = ('btn' in config) ? config.btn : ready.btn[0];
+      config.btn = ('btn' in config) ? config.btn : i18n.$t('layer.confirm');
       layer.closeAll('dialog');
     break;
     case 2:
@@ -602,64 +667,10 @@ Class.pt.auto = function(index){
 // 计算坐标
 Class.pt.offset = function(){
   var that = this, config = that.config, layero = that.layero;
-  var area = [layero.outerWidth(), layero.outerHeight()];
-  var type = typeof config.offset === 'object';
-  that.offsetTop = (win.height() - area[1])/2;
-  that.offsetLeft = (win.width() - area[0])/2;
+  var coords = ready.updatePosition(layero, config);
 
-  if(type){
-    that.offsetTop = config.offset[0];
-    that.offsetLeft = config.offset[1]||that.offsetLeft;
-  } else if(config.offset !== 'auto'){
-
-    if(config.offset === 't'){ // 上
-      that.offsetTop = 0;
-    } else if(config.offset === 'r'){ // 右
-      that.offsetLeft = win.width() - area[0];
-    } else if(config.offset === 'b'){ // 下
-      that.offsetTop = win.height() - area[1];
-    } else if(config.offset === 'l'){ // 左
-      that.offsetLeft = 0;
-    } else if(config.offset === 'lt'){ // 左上
-      that.offsetTop = 0;
-      that.offsetLeft = 0;
-    } else if(config.offset === 'lb'){ // 左下
-      that.offsetTop = win.height() - area[1];
-      that.offsetLeft = 0;
-    } else if(config.offset === 'rt'){ // 右上
-      that.offsetTop = 0;
-      that.offsetLeft = win.width() - area[0];
-    } else if(config.offset === 'rb'){ // 右下
-      that.offsetTop = win.height() - area[1];
-      that.offsetLeft = win.width() - area[0];
-    } else {
-      that.offsetTop = config.offset;
-    }
-
-  }
-
-  if(!config.fixed){
-    that.offsetTop = /%$/.test(that.offsetTop) ?
-      win.height()*parseFloat(that.offsetTop)/100
-    : parseFloat(that.offsetTop);
-    that.offsetLeft = /%$/.test(that.offsetLeft) ?
-      win.width()*parseFloat(that.offsetLeft)/100
-    : parseFloat(that.offsetLeft);
-    that.offsetTop += win.scrollTop();
-    that.offsetLeft += win.scrollLeft();
-  }
-
-  // 最小化窗口时的自适应
-  if(layero.data('maxminStatus') === 'min'){
-    that.offsetTop = win.height() - (layero.find(doms[1]).outerHeight() || 0);
-    that.offsetLeft = layero.css('left');
-  }
-
-  // 设置坐标
-  layero.css({
-    top: that.offsetTop,
-    left: that.offsetLeft
-  });
+  that.offsetTop = coords.offsetTop;
+  that.offsetLeft = coords.offsetLeft;
 };
 
 // Tips
@@ -1056,6 +1067,70 @@ ready.promiseLikeResolve = function(value){
   return deferred.promise();
 }
 
+ready.updatePosition = function(layero, config){
+  var area = [layero.outerWidth(), layero.outerHeight()];
+  var coords = {
+    offsetTop: (win.height() - area[1])/2,
+    offsetLeft: (win.width() - area[0])/2
+  };
+
+  if(typeof config.offset === 'object'){
+    coords.offsetTop = config.offset[0];
+    coords.offsetLeft = config.offset[1] || coords.offsetLeft;
+  } else if(config.offset !== 'auto'){
+
+    if(config.offset === 't'){ // 上
+      coords.offsetTop = 0;
+    } else if(config.offset === 'r'){ // 右
+      coords.offsetLeft = win.width() - area[0];
+    } else if(config.offset === 'b'){ // 下
+      coords.offsetTop = win.height() - area[1];
+    } else if(config.offset === 'l'){ // 左
+      coords.offsetLeft = 0;
+    } else if(config.offset === 'lt'){ // 左上
+      coords.offsetTop = 0;
+      coords.offsetLeft = 0;
+    } else if(config.offset === 'lb'){ // 左下
+      coords.offsetTop = win.height() - area[1];
+      coords.offsetLeft = 0;
+    } else if(config.offset === 'rt'){ // 右上
+      coords.offsetTop = 0;
+      coords.offsetLeft = win.width() - area[0];
+    } else if(config.offset === 'rb'){ // 右下
+      coords.offsetTop = win.height() - area[1];
+      coords.offsetLeft = win.width() - area[0];
+    } else {
+      coords.offsetTop = config.offset;
+    }
+
+  }
+
+  if(!config.fixed){
+    coords.offsetTop = /%$/.test(coords.offsetTop) ?
+      win.height()*parseFloat(coords.offsetTop)/100
+    : parseFloat(coords.offsetTop);
+    coords.offsetLeft = /%$/.test(coords.offsetLeft) ?
+      win.width()*parseFloat(coords.offsetLeft)/100
+    : parseFloat(coords.offsetLeft);
+    coords.offsetTop += win.scrollTop();
+    coords.offsetLeft += win.scrollLeft();
+  }
+
+  // 最小化窗口时的自适应
+  if(layero.data('maxminStatus') === 'min'){
+    coords.offsetTop = win.height() - (layero.find(doms[1]).outerHeight() || 0);
+    coords.offsetLeft = layero.css('left');
+  }
+
+  // 设置坐标
+  layero.css({
+    top: coords.offsetTop,
+    left: coords.offsetLeft
+  });
+
+  return coords;
+};
+
 /** 内置成员 */
 
 window.layer = layer;
@@ -1075,12 +1150,19 @@ layer.getFrameIndex = function(name){
 // iframe 层自适应宽高
 layer.iframeAuto = function(index){
   if(!index) return;
-  var heg = layer.getChildFrame('html', index).outerHeight();
   var layero = $('#'+ doms[0] + index);
-  var titHeight = layero.find(doms[1]).outerHeight() || 0;
+  var options = layero.data('config');
+  var iframeHeight = layer.getChildFrame('html', index).outerHeight();
+  var titleHeight = layero.find(doms[1]).outerHeight() || 0;
   var btnHeight = layero.find('.'+doms[6]).outerHeight() || 0;
-  layero.css({height: heg + titHeight + btnHeight});
-  layero.find('iframe').css({height: heg});
+  var maxHeight = 'maxHeight' in options ? options.maxHeight : win.height();
+  if(maxHeight){
+    iframeHeight = Math.min(iframeHeight, maxHeight - titleHeight - btnHeight);
+  }
+  layero.css({height: iframeHeight + titleHeight + btnHeight});
+  layero.find('iframe').css({height: iframeHeight});
+
+  ready.updatePosition(layero, options);
 };
 
 // 重置 iframe url
@@ -1444,7 +1526,7 @@ layer.prompt = function(options, yes){
 
   return layer.open($.extend({
     type: 1,
-    btn: ['确定','取消'],
+    btn: [i18n.$t('layer.confirm'),i18n.$t('layer.cancel')],
     content: content,
     skin: 'layui-layer-prompt' + skin('prompt'),
     maxWidth: win.width(),
@@ -1457,7 +1539,7 @@ layer.prompt = function(options, yes){
     yes: function(index){
       var value = prompt.val();
       if(value.length > (options.maxlength||500)) {
-        layer.tips('最多输入'+ (options.maxlength || 500) +'个字符', prompt, {tips: 1});
+        layer.tips(i18n.$t('layer.prompt.InputLengthPrompt', {length: (options.maxlength || 500)}), prompt, {tips: 1});
       } else {
         yes && yes(value, index, prompt);
       }
@@ -1571,7 +1653,7 @@ layer.photos = function(options, loop, key){
     // 不直接弹出
     if (!loop) return;
   } else if (data.length === 0){
-    return layer.msg('没有图片');
+    return layer.msg(i18n.$t('layer.photos.noData'));
   }
 
   // 上一张
@@ -1716,7 +1798,7 @@ layer.photos = function(options, loop, key){
     });
 
     // 滑动切换图片事件，仅限 layui 中
-    if(window.layui || window.lay){
+    if(isLayui || (window.lay && typeof window.lay === 'function')){
       var lay = window.layui.lay || window.lay;
       var touchEndCallback = function(e, state){
         var duration = Date.now() - state.timeStart;
@@ -1819,12 +1901,12 @@ layer.photos = function(options, loop, key){
           if (options.toolbar) {
             arr.push([
               '<div class="layui-layer-photos-toolbar layui-layer-photos-header">',
-                '<span toolbar-event="rotate" data-option="90" title="旋转"><i class="layui-icon layui-icon-refresh"></i></span>',
-                '<span toolbar-event="scalex" title="变换"><i class="layui-icon layui-icon-slider"></i></span>',
-                '<span toolbar-event="zoom" data-option="0.1" title="放大"><i class="layui-icon layui-icon-add-circle"></i></span>',
-                '<span toolbar-event="zoom" data-option="-0.1" title="缩小"><i class="layui-icon layui-icon-reduce-circle"></i></span>',
-                '<span toolbar-event="reset" title="还原"><i class="layui-icon layui-icon-refresh-1"></i></span>',
-                '<span toolbar-event="close" title="关闭"><i class="layui-icon layui-icon-close"></i></span>',
+                '<span toolbar-event="rotate" data-option="90" title="'+ i18n.$t('layer.photos.tools.rotate') +'"><i class="layui-icon layui-icon-refresh"></i></span>',
+                '<span toolbar-event="scalex" title="'+ i18n.$t('layer.photos.tools.scaleX') +'"><i class="layui-icon layui-icon-slider"></i></span>',
+                '<span toolbar-event="zoom" data-option="0.1" title="'+ i18n.$t('layer.photos.tools.zoomIn') +'"><i class="layui-icon layui-icon-add-circle"></i></span>',
+                '<span toolbar-event="zoom" data-option="-0.1" title="'+ i18n.$t('layer.photos.tools.zoomOut') +'"><i class="layui-icon layui-icon-reduce-circle"></i></span>',
+                '<span toolbar-event="reset" title="'+ i18n.$t('layer.photos.tools.reset') +'"><i class="layui-icon layui-icon-refresh-1"></i></span>',
+                '<span toolbar-event="close" title="'+ i18n.$t('layer.photos.tools.close') +'"><i class="layui-icon layui-icon-close"></i></span>',
               '</div>'
             ].join(''));
           }
@@ -1834,7 +1916,7 @@ layer.photos = function(options, loop, key){
             arr.push(['<div class="layui-layer-photos-toolbar layui-layer-photos-footer">',
               '<h3>'+ alt +'</h3>',
               '<em>'+ dict.imgIndex +' / '+ data.length +'</em>',
-              '<a href="'+ data[start].src +'" target="_blank">查看原图</a>',
+              '<a href="'+ data[start].src + '" target="_blank">'+ i18n.$t('layer.photos.viewPicture') +'</a>',
             '</div>'].join(''));
           }
 
@@ -1856,9 +1938,9 @@ layer.photos = function(options, loop, key){
     }, options));
   }, function(){
     layer.close(dict.loadi);
-    layer.msg('当前图片地址异常，<br>是否继续查看下一张？', {
+    layer.msg('<span style="white-space: pre-line;">' + i18n.$t('layer.photos.urlError.prompt') + '</span>', {
       time: 30000,
-      btn: ['下一张', '不看了'],
+      btn: [i18n.$t('layer.photos.urlError.confirm'), i18n.$t('layer.photos.urlError.cancel')],
       yes: function(){
         data.length > 1 && dict.imgnext(true,true);
       }
@@ -1897,7 +1979,8 @@ ready.run = function(_$){
 // 加载方式
 window.layui && layui.define ? (
   layer.ready(),
-  layui.define(['jquery','lay'], function(exports){ // layui
+  layui.define(['jquery', 'lay', 'i18n'], function(exports) { // layui
+    i18n.$t = layui.i18n.$t;
     layer.path = layui.cache.dir;
     ready.run(layui.$);
 

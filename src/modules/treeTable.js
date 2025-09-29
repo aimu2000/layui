@@ -400,7 +400,7 @@ layui.define(['table'], function (exports) {
   Class.prototype.getTreeNode = function (data) {
     var that = this;
     if (!data) {
-      return hint.error('找不到节点数据');
+      return hint.error('Node data not found');
     }
     var options = that.getOptions();
     var treeOptions = options.tree;
@@ -422,7 +422,7 @@ layui.define(['table'], function (exports) {
     var that = this;
     var treeNodeData = that.getNodeDataByIndex(index);
     if (!treeNodeData) {
-      return hint.error('找不到节点数据');
+      return hint.error('Node data not found by index: ' + index);
     }
     var options = that.getOptions();
     var treeOptions = options.tree;
@@ -711,7 +711,7 @@ layui.define(['table'], function (exports) {
           var asyncParseData = asyncSetting.parseData || options.parseData;
           var asyncResponse = asyncSetting.response || options.response;
 
-          $.ajax({
+          var ajaxOptions = {
             type: asyncType || 'get',
             url: asyncUrl,
             contentType: asyncContentType,
@@ -742,7 +742,14 @@ layui.define(['table'], function (exports) {
               // 异常处理 todo
               typeof options.error === 'function' && options.error(e, msg);
             }
-          });
+          }
+
+          if(options.ajax){
+            options.ajax(ajaxOptions, 'treeNodes')
+          }else{
+            $.ajax(ajaxOptions);
+          }
+
           return retValue;
         }
         trExpanded = trData[LAY_HAS_EXPANDED] = true;
@@ -886,7 +893,7 @@ layui.define(['table'], function (exports) {
    * */
   treeTable.expandAll = function (id, expandFlag) {
     if (layui.type(expandFlag) !== 'boolean') {
-      return hint.error('expandAll 的展开状态参数只接收true/false')
+      return hint.error('treeTable.expandAll param "expandFlag" must be a boolean value.')
     }
 
     var that = getThisTable(id);
