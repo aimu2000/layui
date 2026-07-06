@@ -2,7 +2,7 @@ name: Issue Opened
 
 on:
   issues:
-    types: [opened, edited]
+    types: [opened, edited, typed, untyped]
 
 permissions:
   contents: read
@@ -34,7 +34,13 @@ jobs:
             const payload = context.payload;
             const isCreatedByBot = payload.sender.type === 'Bot';
             const issue = payload.issue;
-            const isValid = issue.body?.includes('layui-issue-template');
+
+            // 是否遵循 Issue 模板
+            const followsIssueTemplate = issue.body?.includes('layui-issue-template');
+
+            // 是否已选择 GitHub Issue Type
+            const issueTypeValue = issue.type?.name || issue.issue_type?.name;
+            const hasIssueType = !!issueTypeValue;
 
             // 跳过 closed 状态的 issues
             if (issue.state === 'closed') {
@@ -48,8 +54,13 @@ jobs:
               }
             }
 
-            // 不符合规则或由机器人创建
-            if (isCreatedByBot || !isValid) {
+            // 若已选择 Issue Type，则无需校验
+            if (hasIssueType) {
+              return console.log(`Issue has Issue Type: ${issueTypeValue}`);
+            }
+
+            // 由机器人创建或不符合模板规范
+            if (isCreatedByBot || !followsIssueTemplate) {
               if (!isCreatedByBot) {
                 github.rest.issues.createComment({
                   ...config,
